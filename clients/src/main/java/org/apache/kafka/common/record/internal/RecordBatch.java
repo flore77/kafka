@@ -241,6 +241,21 @@ public interface RecordBatch extends Iterable<Record> {
     CloseableIterator<Record> streamingIterator(BufferSupplier decompressionBufferSupplier);
 
     /**
+     * Return a streaming iterator that decompresses the entire batch into a contiguous buffer
+     * obtained from the given {@code batchBufferSupplier}, then parses records via ByteBuffer
+     * slicing with zero per-record allocation. For uncompressed batches, the batch buffer supplier
+     * is unused and this method behaves identically to {@link #streamingIterator(BufferSupplier)}.
+     *
+     * @param decompressionBufferSupplier The supplier of ByteBuffer(s) used for decompression codec internals
+     * @param batchBufferSupplier Supplier for the buffer that holds the entire decompressed batch
+     * @return The closeable iterator
+     */
+    default CloseableIterator<Record> streamingIterator(BufferSupplier decompressionBufferSupplier,
+                                                        BufferSupplier batchBufferSupplier) {
+        return streamingIterator(decompressionBufferSupplier);
+    }
+
+    /**
      * Check whether this is a control batch (i.e. whether the control bit is set in the batch attributes).
      * For magic versions prior to 2, this is always false.
      *

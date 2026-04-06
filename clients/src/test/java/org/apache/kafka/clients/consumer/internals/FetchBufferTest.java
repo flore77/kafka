@@ -193,6 +193,7 @@ public class FetchBufferTest {
                 logContext.logger(CompletedFetch.class),
                 subscriptions,
                 BufferSupplier.create(),
+                new BufferSupplier.GrowableBufferSupplier(),
                 tp,
                 partitionData,
                 metricsAggregator,

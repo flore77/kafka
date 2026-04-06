@@ -270,14 +270,15 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
         return buffer.getInt(PARTITION_LEADER_EPOCH_OFFSET);
     }
 
-    public InputStream recordInputStream(BufferSupplier bufferSupplier) {
+    public InputStream recordInputStream(BufferSupplier decompressionBufferSupplier) {
         final ByteBuffer buffer = this.buffer.duplicate();
         buffer.position(RECORDS_OFFSET);
-        return Compression.of(compressionType()).build().wrapForInput(buffer, magic(), bufferSupplier);
+        return Compression.of(compressionType()).build().wrapForInput(buffer, magic(), decompressionBufferSupplier);
     }
 
-    private CloseableIterator<Record> compressedIterator(BufferSupplier bufferSupplier, boolean skipKeyValue) {
-        final InputStream inputStream = recordInputStream(bufferSupplier);
+    private CloseableIterator<Record> compressedIterator(BufferSupplier decompressionBufferSupplier,
+                                                         boolean skipKeyValue) {
+        final InputStream inputStream = recordInputStream(decompressionBufferSupplier);
 
         if (skipKeyValue) {
             return new StreamRecordIterator(inputStream) {
@@ -356,11 +357,86 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
     }
 
     @Override
-    public CloseableIterator<Record> streamingIterator(BufferSupplier bufferSupplier) {
+    public CloseableIterator<Record> streamingIterator(BufferSupplier decompressionBufferSupplier) {
         if (isCompressed())
-            return compressedIterator(bufferSupplier, false);
+            return compressedIterator(decompressionBufferSupplier, false);
         else
             return uncompressedIterator();
+    }
+
+    /**
+     * Streaming iterator that decompresses the entire batch into a contiguous buffer,
+     * then parses records via ByteBuffer slicing — zero per-record allocation.
+     */
+    @Override
+    public CloseableIterator<Record> streamingIterator(BufferSupplier decompressionBufferSupplier,
+                                                       BufferSupplier batchBufferSupplier) {
+        if (isCompressed())
+            return compressedBufferIterator(decompressionBufferSupplier, batchBufferSupplier);
+        else
+            return uncompressedIterator();
+    }
+
+    private CloseableIterator<Record> compressedBufferIterator(BufferSupplier decompressionBufferSupplier,
+                                                               BufferSupplier batchBufferSupplier) {
+        final ByteBuffer buffer = decompressInto(decompressionBufferSupplier, batchBufferSupplier);
+
+        return new RecordIterator() {
+            @Override
+            protected Record readNext(long baseOffset, long baseTimestamp, int baseSequence, Long logAppendTime) {
+                try {
+                    return DefaultRecord.readFrom(buffer, baseOffset, baseTimestamp, baseSequence, logAppendTime);
+                } catch (BufferUnderflowException e) {
+                    throw new InvalidRecordException("Incorrect declared batch size, premature EOF reached");
+                }
+            }
+
+            @Override
+            protected boolean ensureNoneRemaining() {
+                return !buffer.hasRemaining();
+            }
+
+            @Override
+            public void close() {
+                batchBufferSupplier.release(buffer);
+            }
+        };
+    }
+
+    private ByteBuffer decompressInto(BufferSupplier decompressionBufferSupplier, BufferSupplier batchBufferSupplier) {
+        // Estimate decompressed size as 2x the compressed records payload
+        final int compressedRecordsSize = sizeInBytes() - RECORDS_OFFSET;
+        final int initialCapacity = Math.max(compressedRecordsSize * 2, 1024);
+
+        ByteBuffer buf = batchBufferSupplier.get(initialCapacity);
+
+        try (InputStream inputStream = recordInputStream(decompressionBufferSupplier)) {
+            int bytesRead;
+
+            do {
+                bytesRead = inputStream.read(buf.array(), buf.arrayOffset() + buf.position(), buf.remaining());
+
+                if (bytesRead == -1)
+                    break;
+
+                buf.position(buf.position() + bytesRead);
+
+                if (!buf.hasRemaining()) {
+                    int newCapacity = buf.capacity() * 2;
+                    ByteBuffer newBuf = batchBufferSupplier.get(newCapacity);
+                    buf.flip();
+                    newBuf.put(buf);
+                    batchBufferSupplier.release(buf);
+                    buf = newBuf;
+                }
+            } while (true);
+        } catch (IOException e) {
+            batchBufferSupplier.release(buf);
+            throw new KafkaException("Failed to decompress record batch", e);
+        }
+
+        buf.flip();
+        return buf;
     }
 
     @Override

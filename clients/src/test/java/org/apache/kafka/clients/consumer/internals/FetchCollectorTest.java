@@ -916,6 +916,7 @@ public class FetchCollectorTest {
                     logContext.logger(CompletedFetch.class),
                     subscriptions,
                     BufferSupplier.create(),
+                    new BufferSupplier.GrowableBufferSupplier(),
                     topicPartition,
                     partitionData,
                     metricsAggregator,

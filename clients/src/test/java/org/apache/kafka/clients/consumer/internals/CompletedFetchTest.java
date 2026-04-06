@@ -223,6 +223,7 @@ public class CompletedFetchTest {
                 logContext.logger(CompletedFetch.class),
                 subscriptions,
                 BufferSupplier.create(),
+                new BufferSupplier.GrowableBufferSupplier(),
                 TP,
                 partitionData,
                 metricAggregator,

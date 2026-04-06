@@ -64,6 +64,7 @@ public class CompletedFetch {
     private final Logger log;
     private final SubscriptionState subscriptions;
     private final BufferSupplier decompressionBufferSupplier;
+    private final BufferSupplier batchBufferSupplier;
     private final Iterator<? extends RecordBatch> batches;
     private final Set<Long> abortedProducerIds;
     private final PriorityQueue<FetchResponseData.AbortedTransaction> abortedTransactions;
@@ -84,6 +85,7 @@ public class CompletedFetch {
     CompletedFetch(Logger log,
                    SubscriptionState subscriptions,
                    BufferSupplier decompressionBufferSupplier,
+                   BufferSupplier batchBufferSupplier,
                    TopicPartition partition,
                    FetchResponseData.PartitionData partitionData,
                    FetchMetricsAggregator metricAggregator,
@@ -91,6 +93,7 @@ public class CompletedFetch {
         this.log = log;
         this.subscriptions = subscriptions;
         this.decompressionBufferSupplier = decompressionBufferSupplier;
+        this.batchBufferSupplier = batchBufferSupplier;
         this.partition = partition;
         this.partitionData = partitionData;
         this.metricAggregator = metricAggregator;
@@ -218,7 +221,7 @@ public class CompletedFetch {
                     }
                 }
 
-                records = currentBatch.streamingIterator(decompressionBufferSupplier);
+                records = currentBatch.streamingIterator(decompressionBufferSupplier, batchBufferSupplier);
             } else {
                 Record record = records.next();
                 // skip any records out of range

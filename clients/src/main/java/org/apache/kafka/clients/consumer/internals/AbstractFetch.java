@@ -76,6 +76,7 @@ public abstract class AbstractFetch implements Closeable {
     protected final FetchMetricsManager metricsManager;
     protected final FetchBuffer fetchBuffer;
     protected final BufferSupplier decompressionBufferSupplier;
+    protected final BufferSupplier batchBufferSupplier;
     protected final Set<Integer> nodesWithPendingFetchRequests;
 
     private final Map<Integer, FetchSessionHandler> sessionHandlers;
@@ -98,6 +99,7 @@ public abstract class AbstractFetch implements Closeable {
         this.fetchConfig = fetchConfig;
         this.fetchBuffer = fetchBuffer;
         this.decompressionBufferSupplier = BufferSupplier.create();
+        this.batchBufferSupplier = new BufferSupplier.GrowableBufferSupplier();
         this.sessionHandlers = new HashMap<>();
         this.nodesWithPendingFetchRequests = new HashSet<>();
         this.metricsManager = metricsManager;
@@ -218,6 +220,7 @@ public abstract class AbstractFetch implements Closeable {
                         completedFetchLog,
                         subscriptions,
                         decompressionBufferSupplier,
+                        batchBufferSupplier,
                         partition,
                         partitionData,
                         metricAggregator,
@@ -625,6 +628,7 @@ public abstract class AbstractFetch implements Closeable {
         // we do not need to re-enable wake-ups since we are closing already
         Utils.closeQuietly(fetchBuffer, "fetchBuffer");
         Utils.closeQuietly(decompressionBufferSupplier, "decompressionBufferSupplier");
+        Utils.closeQuietly(batchBufferSupplier, "batchBufferSupplier");
     }
 
     public void close(final Timer timer) {
