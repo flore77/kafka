@@ -21,9 +21,11 @@ import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.SaslConfigs;
 import org.apache.kafka.common.internals.ClusterResourceListeners;
+import org.apache.kafka.common.memory.MemoryPool;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.common.network.ChannelBuilder;
+import org.apache.kafka.common.network.NetworkReceive;
 import org.apache.kafka.common.network.ChannelBuilders;
 import org.apache.kafka.common.network.Selector;
 import org.apache.kafka.common.security.JaasContext;
@@ -160,6 +162,22 @@ public final class ClientUtils {
                                                     Metadata metadata,
                                                     Sensor throttleTimeSensor,
                                                     ClientTelemetrySender clientTelemetrySender) {
+        return createNetworkClient(config, metrics, metricsGroupPrefix, logContext,
+                apiVersions, time, maxInFlightRequestsPerConnection, metadata,
+                throttleTimeSensor, clientTelemetrySender, MemoryPool.NONE);
+    }
+
+    public static NetworkClient createNetworkClient(AbstractConfig config,
+                                                    Metrics metrics,
+                                                    String metricsGroupPrefix,
+                                                    LogContext logContext,
+                                                    ApiVersions apiVersions,
+                                                    Time time,
+                                                    int maxInFlightRequestsPerConnection,
+                                                    Metadata metadata,
+                                                    Sensor throttleTimeSensor,
+                                                    ClientTelemetrySender clientTelemetrySender,
+                                                    MemoryPool memoryPool) {
         return createNetworkClient(config,
                 config.getString(CommonClientConfigs.CLIENT_ID_CONFIG),
                 metrics,
@@ -173,7 +191,8 @@ public final class ClientUtils {
                 null,
                 new DefaultHostResolver(),
                 throttleTimeSensor,
-                clientTelemetrySender);
+                clientTelemetrySender,
+                memoryPool);
     }
 
     public static NetworkClient createNetworkClient(AbstractConfig config,
@@ -217,16 +236,43 @@ public final class ClientUtils {
                                                     HostResolver hostResolver,
                                                     Sensor throttleTimeSensor,
                                                     ClientTelemetrySender clientTelemetrySender) {
+        return createNetworkClient(config, clientId, metrics, metricsGroupPrefix, logContext,
+                apiVersions, time, maxInFlightRequestsPerConnection, requestTimeoutMs,
+                metadata, metadataUpdater, hostResolver, throttleTimeSensor,
+                clientTelemetrySender, MemoryPool.NONE);
+    }
+
+    public static NetworkClient createNetworkClient(AbstractConfig config,
+                                                    String clientId,
+                                                    Metrics metrics,
+                                                    String metricsGroupPrefix,
+                                                    LogContext logContext,
+                                                    ApiVersions apiVersions,
+                                                    Time time,
+                                                    int maxInFlightRequestsPerConnection,
+                                                    int requestTimeoutMs,
+                                                    Metadata metadata,
+                                                    MetadataUpdater metadataUpdater,
+                                                    HostResolver hostResolver,
+                                                    Sensor throttleTimeSensor,
+                                                    ClientTelemetrySender clientTelemetrySender,
+                                                    MemoryPool memoryPool) {
         ChannelBuilder channelBuilder = null;
         Selector selector = null;
 
         try {
             channelBuilder = ClientUtils.createChannelBuilder(config, time, logContext);
-            selector = new Selector(config.getLong(CommonClientConfigs.CONNECTIONS_MAX_IDLE_MS_CONFIG),
+            selector = new Selector(NetworkReceive.UNLIMITED,
+                    config.getLong(CommonClientConfigs.CONNECTIONS_MAX_IDLE_MS_CONFIG),
+                    Selector.NO_FAILED_AUTHENTICATION_DELAY,
                     metrics,
                     time,
                     metricsGroupPrefix,
+                    Collections.emptyMap(),
+                    true,
+                    false,
                     channelBuilder,
+                    memoryPool,
                     logContext);
             return new NetworkClient(metadataUpdater,
                     metadata,

@@ -22,6 +22,7 @@ import org.apache.kafka.common.message.FetchResponseData;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.utils.BufferSupplier;
+import org.apache.kafka.common.utils.PooledBuffer;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Time;
@@ -194,6 +195,7 @@ public class FetchBufferTest {
                 subscriptions,
                 BufferSupplier.create(),
                 new BufferSupplier.GrowableBufferSupplier(),
+                PooledBuffer.NONE,
                 tp,
                 partitionData,
                 metricsAggregator,

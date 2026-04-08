@@ -38,6 +38,7 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.UUIDDeserializer;
 import org.apache.kafka.common.serialization.UUIDSerializer;
 import org.apache.kafka.common.utils.BufferSupplier;
+import org.apache.kafka.common.utils.PooledBuffer;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Time;
@@ -224,6 +225,7 @@ public class CompletedFetchTest {
                 subscriptions,
                 BufferSupplier.create(),
                 new BufferSupplier.GrowableBufferSupplier(),
+                PooledBuffer.NONE,
                 TP,
                 partitionData,
                 metricAggregator,

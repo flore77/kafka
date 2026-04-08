@@ -137,6 +137,10 @@ public class NetworkReceive implements Receive {
         return this.buffer;
     }
 
+    public MemoryPool memoryPool() {
+        return this.memoryPool;
+    }
+
     public int bytesRead() {
         if (buffer == null)
             return size.position();

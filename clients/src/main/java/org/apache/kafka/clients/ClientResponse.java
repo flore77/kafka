@@ -18,8 +18,11 @@ package org.apache.kafka.clients;
 
 import org.apache.kafka.common.errors.AuthenticationException;
 import org.apache.kafka.common.errors.UnsupportedVersionException;
+import org.apache.kafka.common.memory.MemoryPool;
 import org.apache.kafka.common.requests.AbstractResponse;
 import org.apache.kafka.common.requests.RequestHeader;
+
+import java.nio.ByteBuffer;
 
 /**
  * A response from the server. Contains both the body of the response as well as the correlated request
@@ -37,18 +40,9 @@ public class ClientResponse {
     private final UnsupportedVersionException versionMismatch;
     private final AuthenticationException authenticationException;
     private final AbstractResponse responseBody;
+    private final MemoryPool memoryPool;
+    private final ByteBuffer responsePayload;
 
-    /**
-     * @param requestHeader The header of the corresponding request
-     * @param callback The callback to be invoked
-     * @param destination The node the corresponding request was sent to
-     * @param createdTimeMs The unix timestamp when the corresponding request was created
-     * @param receivedTimeMs The unix timestamp when this response was received
-     * @param disconnected Whether the client disconnected before fully reading a response
-     * @param versionMismatch Whether there was a version mismatch that prevented sending the request.
-     * @param responseBody The response contents (or null) if we disconnected, no response was expected,
-     *                     or if there was a version mismatch.
-     */
     public ClientResponse(RequestHeader requestHeader,
                           RequestCompletionHandler callback,
                           String destination,
@@ -58,32 +52,11 @@ public class ClientResponse {
                           UnsupportedVersionException versionMismatch,
                           AuthenticationException authenticationException,
                           AbstractResponse responseBody) {
-        this(requestHeader,
-             callback,
-             destination,
-             createdTimeMs,
-             receivedTimeMs,
-             disconnected,
-             false,
-             versionMismatch,
-             authenticationException,
-             responseBody);
+        this(requestHeader, callback, destination, createdTimeMs, receivedTimeMs,
+             disconnected, false, versionMismatch, authenticationException, responseBody,
+             null, null);
     }
 
-    /**
-     * @param requestHeader The header of the corresponding request
-     * @param callback The callback to be invoked
-     * @param destination The node the corresponding request was sent to
-     * @param createdTimeMs The unix timestamp when the corresponding request was created
-     * @param receivedTimeMs The unix timestamp when this response was received
-     * @param disconnected Whether the client disconnected before fully reading a response
-     * @param timedOut Whether the client was disconnected because of a timeout; when setting this
-     *                 to <code>true</code>, <code>disconnected</code> must be <code>true</code>
-     *                 or an {@link IllegalStateException} will be thrown
-     * @param versionMismatch Whether there was a version mismatch that prevented sending the request.
-     * @param responseBody The response contents (or null) if we disconnected, no response was expected,
-     *                     or if there was a version mismatch.
-     */
     public ClientResponse(RequestHeader requestHeader,
                           RequestCompletionHandler callback,
                           String destination,
@@ -94,6 +67,23 @@ public class ClientResponse {
                           UnsupportedVersionException versionMismatch,
                           AuthenticationException authenticationException,
                           AbstractResponse responseBody) {
+        this(requestHeader, callback, destination, createdTimeMs, receivedTimeMs,
+             disconnected, timedOut, versionMismatch, authenticationException, responseBody,
+             null, null);
+    }
+
+    public ClientResponse(RequestHeader requestHeader,
+                          RequestCompletionHandler callback,
+                          String destination,
+                          long createdTimeMs,
+                          long receivedTimeMs,
+                          boolean disconnected,
+                          boolean timedOut,
+                          UnsupportedVersionException versionMismatch,
+                          AuthenticationException authenticationException,
+                          AbstractResponse responseBody,
+                          MemoryPool memoryPool,
+                          ByteBuffer responsePayload) {
         if (!disconnected && timedOut)
             throw new IllegalStateException("The client response can't be in the state of connected, yet timed out");
 
@@ -107,6 +97,8 @@ public class ClientResponse {
         this.versionMismatch = versionMismatch;
         this.authenticationException = authenticationException;
         this.responseBody = responseBody;
+        this.memoryPool = memoryPool;
+        this.responsePayload = responsePayload;
     }
 
     public long receivedTimeMs() {
@@ -143,6 +135,14 @@ public class ClientResponse {
 
     public boolean hasResponse() {
         return responseBody != null;
+    }
+
+    public MemoryPool memoryPool() {
+        return memoryPool;
+    }
+
+    public ByteBuffer responsePayload() {
+        return responsePayload;
     }
 
     public long requestLatencyMs() {

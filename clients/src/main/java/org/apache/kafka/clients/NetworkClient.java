@@ -25,6 +25,7 @@ import org.apache.kafka.common.errors.DisconnectException;
 import org.apache.kafka.common.errors.UnsupportedVersionException;
 import org.apache.kafka.common.message.ApiVersionsResponseData.ApiVersion;
 import org.apache.kafka.common.metrics.Sensor;
+import org.apache.kafka.common.memory.MemoryPool;
 import org.apache.kafka.common.network.ChannelState;
 import org.apache.kafka.common.network.NetworkReceive;
 import org.apache.kafka.common.network.NetworkSend;
@@ -1007,16 +1008,21 @@ public class NetworkClient implements KafkaClient {
 
             // If the received response includes a throttle delay, throttle the connection.
             maybeThrottle(response, req.header.apiVersion(), req.destination, now);
-            if (req.isInternalRequest && response instanceof MetadataResponse)
+            if (req.isInternalRequest && response instanceof MetadataResponse) {
                 metadataUpdater.handleSuccessfulResponse(req.header, now, (MetadataResponse) response);
-            else if (req.isInternalRequest && response instanceof ApiVersionsResponse)
+                receive.memoryPool().release(receive.payload());
+            } else if (req.isInternalRequest && response instanceof ApiVersionsResponse) {
                 handleApiVersionsResponse(responses, req, now, (ApiVersionsResponse) response);
-            else if (req.isInternalRequest && response instanceof GetTelemetrySubscriptionsResponse)
+                receive.memoryPool().release(receive.payload());
+            } else if (req.isInternalRequest && response instanceof GetTelemetrySubscriptionsResponse) {
                 telemetrySender.handleResponse((GetTelemetrySubscriptionsResponse) response);
-            else if (req.isInternalRequest && response instanceof PushTelemetryResponse)
+                receive.memoryPool().release(receive.payload());
+            } else if (req.isInternalRequest && response instanceof PushTelemetryResponse) {
                 telemetrySender.handleResponse((PushTelemetryResponse) response);
-            else
-                responses.add(req.completed(response, now));
+                receive.memoryPool().release(receive.payload());
+            } else {
+                responses.add(req.completed(response, now, receive.memoryPool(), receive.payload()));
+            }
         }
     }
 
@@ -1573,6 +1579,12 @@ public class NetworkClient implements KafkaClient {
         public ClientResponse completed(AbstractResponse response, long timeMs) {
             return new ClientResponse(header, callback, destination, createdTimeMs, timeMs,
                     false, null, null, response);
+        }
+
+        public ClientResponse completed(AbstractResponse response, long timeMs,
+                                        MemoryPool memoryPool, ByteBuffer responsePayload) {
+            return new ClientResponse(header, callback, destination, createdTimeMs, timeMs,
+                    false, false, null, null, response, memoryPool, responsePayload);
         }
 
         public ClientResponse timedOut(long timeMs) {

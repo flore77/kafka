@@ -26,6 +26,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerInterceptor;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.IsolationLevel;
+import org.apache.kafka.common.memory.RecyclingMemoryPool;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.InterruptException;
@@ -97,7 +98,8 @@ public final class ConsumerUtils {
                 CONSUMER_MAX_INFLIGHT_REQUESTS_PER_CONNECTION,
                 metadata,
                 throttleTimeSensor,
-                clientTelemetrySender);
+                clientTelemetrySender,
+                new RecyclingMemoryPool());
 
         // Will avoid blocking an extended period of time to prevent heartbeat thread starvation
         int heartbeatIntervalMs = config.getInt(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG);

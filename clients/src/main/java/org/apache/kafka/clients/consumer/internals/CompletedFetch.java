@@ -36,6 +36,7 @@ import org.apache.kafka.common.requests.FetchResponse;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.CloseableIterator;
+import org.apache.kafka.common.utils.PooledBuffer;
 
 import org.slf4j.Logger;
 
@@ -65,6 +66,7 @@ public class CompletedFetch {
     private final SubscriptionState subscriptions;
     private final BufferSupplier decompressionBufferSupplier;
     private final BufferSupplier batchBufferSupplier;
+    private final PooledBuffer pooledBuffer;
     private final Iterator<? extends RecordBatch> batches;
     private final Set<Long> abortedProducerIds;
     private final PriorityQueue<FetchResponseData.AbortedTransaction> abortedTransactions;
@@ -86,6 +88,7 @@ public class CompletedFetch {
                    SubscriptionState subscriptions,
                    BufferSupplier decompressionBufferSupplier,
                    BufferSupplier batchBufferSupplier,
+                   PooledBuffer pooledBuffer,
                    TopicPartition partition,
                    FetchResponseData.PartitionData partitionData,
                    FetchMetricsAggregator metricAggregator,
@@ -94,6 +97,7 @@ public class CompletedFetch {
         this.subscriptions = subscriptions;
         this.decompressionBufferSupplier = decompressionBufferSupplier;
         this.batchBufferSupplier = batchBufferSupplier;
+        this.pooledBuffer = pooledBuffer;
         this.partition = partition;
         this.partitionData = partitionData;
         this.metricAggregator = metricAggregator;
@@ -145,6 +149,7 @@ public class CompletedFetch {
             cachedRecordException = null;
             this.isConsumed = true;
             recordAggregatedMetrics(bytesRead, recordsRead);
+            pooledBuffer.release();
 
             // we move the partition to the end if we received some bytes. This way, it's more likely that partitions
             // for the same topic can remain together (allowing for more efficient serialization).

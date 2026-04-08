@@ -36,6 +36,7 @@ import org.apache.kafka.common.requests.FetchRequest;
 import org.apache.kafka.common.requests.FetchResponse;
 import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.LogContext;
+import org.apache.kafka.common.utils.PooledBuffer;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Timer;
 import org.apache.kafka.common.utils.Utils;
@@ -153,6 +154,8 @@ public abstract class AbstractFetch implements Closeable {
     protected void handleFetchSuccess(final Node fetchTarget,
                                       final FetchSessionHandler.FetchRequestData data,
                                       final ClientResponse resp) {
+        PooledBuffer pooledBuffer = PooledBuffer.NONE;
+
         try {
             final FetchResponse response = (FetchResponse) resp.responseBody();
             final FetchSessionHandler handler = sessionHandler(fetchTarget.id());
@@ -160,6 +163,7 @@ public abstract class AbstractFetch implements Closeable {
             if (handler == null) {
                 log.error("Unable to find FetchSessionHandler for node {}. Ignoring fetch response.",
                         fetchTarget.id());
+                releaseResponsePayload(resp);
                 return;
             }
 
@@ -169,13 +173,17 @@ public abstract class AbstractFetch implements Closeable {
                 if (response.error() == Errors.FETCH_SESSION_TOPIC_ID_ERROR) {
                     metadata.requestUpdate(false);
                 }
-
+                releaseResponsePayload(resp);
                 return;
             }
 
             final Map<TopicPartition, FetchResponseData.PartitionData> responseData = response.responseData(handler.sessionTopicNames(), requestVersion);
             final Set<TopicPartition> partitions = new HashSet<>(responseData.keySet());
             final FetchMetricsAggregator metricAggregator = new FetchMetricsAggregator(metricsManager, partitions);
+
+            pooledBuffer = (resp.memoryPool() != null && resp.responsePayload() != null)
+                    ? new PooledBuffer(resp.responsePayload(), resp.memoryPool(), responseData.size())
+                    : PooledBuffer.NONE;
 
             boolean needsWakeup = true;
 
@@ -221,6 +229,7 @@ public abstract class AbstractFetch implements Closeable {
                         subscriptions,
                         decompressionBufferSupplier,
                         batchBufferSupplier,
+                        pooledBuffer,
                         partition,
                         partitionData,
                         metricAggregator,
@@ -254,8 +263,17 @@ public abstract class AbstractFetch implements Closeable {
             }
 
             metricsManager.recordLatency(resp.destination(), resp.requestLatencyMs());
+        } catch (Exception e) {
+            pooledBuffer.forceRelease();
+            throw e;
         } finally {
             removePendingFetchRequest(fetchTarget, data.metadata().sessionId());
+        }
+    }
+
+    private static void releaseResponsePayload(ClientResponse resp) {
+        if (resp.memoryPool() != null && resp.responsePayload() != null) {
+            resp.memoryPool().release(resp.responsePayload());
         }
     }
 
